@@ -1,6 +1,10 @@
 import pyodbc
 import pandas as pd
-import streamlit as st
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import dash_daq as daq
+from dash import Input, Output
 
 # Configuração da conexão com o banco de dados SQL Server
 server = 'DCPRD068013'
@@ -17,7 +21,7 @@ def consultar_e_calcular_informacoes():
     try:
         conn = pyodbc.connect(connection_string)
     except pyodbc.Error as e:
-        st.error("Erro ao conectar ao SQL Server:", e)
+        print("Erro ao conectar ao SQL Server:", e)
         return None, None, None
 
     if conn:
@@ -53,10 +57,7 @@ def consultar_e_calcular_informacoes():
         """
 
         # Executar a consulta e obter os resultados em um DataFrame
-        try:
-            df = pd.read_sql(query, conn)
-        except pd.errors.EmptyDataError:
-            df = pd.DataFrame()
+        df = pd.read_sql(query, conn)
 
         # Fechar a conexão
         conn.close()
@@ -67,16 +68,55 @@ def consultar_e_calcular_informacoes():
         total = len(df)
         
         return turno_1, turno_2, total
+    else:
+        return None, None, None
 
-# Layout do aplicativo
-st.title('Dashboard')
+# Criar o aplicativo Dash
+app = dash.Dash(__name__)
 
-# Chamar a função para consultar e calcular as informações
-turno_1, turno_2, total = consultar_e_calcular_informacoes()
+# Definir o layout do aplicativo
+app.layout = html.Div([
+    html.Div([
+        html.Div([
+            html.H2('1º TURNO', style={'fontSize': 60}),
+            html.P(id='turno-1', style={'fontSize': 60}),
+        ], style={'display': 'inline-block', 'marginRight': 20}),
+        
+        html.Div([
+            html.H2('2º TURNO', style={'fontSize': 60}),
+            html.P(id='turno-2', style={'fontSize': 60}),
+        ], style={'display': 'inline-block'}),
+    ]),
+    
+    html.Div([
+        html.Div([
+            html.H2('TOTAL', style={'fontSize': 70}),
+            html.P(id='total', style={'fontSize': 70}),
+        ], style={'display': 'inline-block'}),
+    ]),
+    
+    dcc.Interval(
+        id='interval-component',
+        interval=60000,  # Atualizar a cada 60 segundos (ajuste conforme necessário)
+        n_intervals=0
+    )
+])
 
-if turno_1 is not None and turno_2 is not None and total is not None:
-    st.write(f'1º TURNO: {turno_1}')
-    st.write(f'2º TURNO: {turno_2}')
-    st.write(f'TOTAL: {total}')
-else:
-    st.error('Erro de Con
+# Callback para atualizar os cartões com as informações
+@app.callback(
+    [Output('turno-1', 'children'),
+     Output('turno-2', 'children'),
+     Output('total', 'children')],
+    [Input('interval-component', 'n_intervals')]
+)
+def update_cards(n):
+    turno_1, turno_2, total = consultar_e_calcular_informacoes()
+    
+    if turno_1 is not None and turno_2 is not None and total is not None:
+        return str(turno_1), str(turno_2), str(total)
+    else:
+        return 'Erro de Conexão', 'Erro de Conexão', 'Erro de Conexão'
+
+# Executar o aplicativo
+if __name__ == '__main__':
+    app.run_server(debug=True)
